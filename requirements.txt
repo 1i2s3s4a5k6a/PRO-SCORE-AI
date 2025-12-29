@@ -1,6 +1,5 @@
-streamlit>=1.37.0
+streamlit
 requests
 pandas
 numpy
-textblob
-nltk
+xlsxwriter
