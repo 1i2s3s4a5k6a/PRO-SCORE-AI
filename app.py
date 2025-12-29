@@ -2,13 +2,14 @@ import streamlit as st
 import requests
 import pandas as pd
 import math
+import numpy as np
 
 # --- CONFIG ---
 API_KEY = "dac17517d43d471e94d2b2484ef5df96"
 BASE_URL = "https://api.football-data.org/v4/"
 HEADERS = {'X-Auth-Token': API_KEY}
 
-st.set_page_config(page_title="AI Football Scout", layout="wide")
+st.set_page_config(page_title="AI Betting Suite", layout="wide")
 
 # --- SIDEBAR: TEAM ID LOOK-UP ---
 st.sidebar.header("🔍 Team ID Look-up")
@@ -26,15 +27,15 @@ def get_team_ids(league_code):
 st.sidebar.dataframe(get_team_ids(look_league), hide_index=True)
 
 # --- MAIN INTERFACE ---
-st.title("⚽ AI Football Scout & Professional Betting Suite")
+st.title("🛡️ AI Betting & Strategy Suite")
 
-tabs = st.tabs(["Research & H2H", "Arbitrage Scanner", "Kelly & Risk", "Goal Path", "Glossary"])
+tabs = st.tabs(["Research & H2H", "Arbitrage Scanner", "Bankroll & Risk", "Goal Path", "Aviator Tracker", "Glossary"])
 
 with tabs[0]:
     col1, col2 = st.columns(2)
     with col1:
         st.header("League Standings")
-        league = st.selectbox("League", ["PL", "BL1", "SA", "PD", "FL1"])
+        league = st.selectbox("League", ["PL", "BL1", "SA", "PD", "FL1"], key="res_league")
         if st.button("Fetch Table"):
             data = requests.get(f"{BASE_URL}competitions/{league}/standings", headers=HEADERS).json()
             if 'standings' in data:
@@ -47,60 +48,57 @@ with tabs[0]:
         if st.button("Analyze Matchup"):
             res = requests.get(f"{BASE_URL}teams/{id_a}/matches?competitors={id_b}", headers=HEADERS).json()
             if 'matches' in res and len(res['matches']) > 0:
-                matches = res['matches']
-                st.dataframe(pd.DataFrame([{"Date": m['utcDate'][:10], "Score": f"{m['score']['fullTime']['home']}-{m['score']['fullTime']['away']}", "Winner": m['score']['winner']} for m in matches]))
+                st.dataframe(pd.DataFrame([{"Date": m['utcDate'][:10], "Score": f"{m['score']['fullTime']['home']}-{m['score']['fullTime']['away']}", "Winner": m['score']['winner']} for m in res['matches']]))
 
 with tabs[1]:
-    st.header("⚖️ Arbitrage (Guaranteed Profit) Calculator")
-    st.write("Find odds for the same game at two different bookies. If the Arbitrage % is < 100, you win regardless of the outcome.")
-    
-    col_a, col_b = st.columns(2)
-    odds_1 = col_a.number_input("Bookie A Odds (Team 1)", value=2.10)
-    odds_2 = col_b.number_input("Bookie B Odds (Team 2/Draw)", value=2.10)
-    total_investment = st.number_input("Total Amount to Invest ($)", value=100.0)
-    
-    arb_pct = (1/odds_1) + (1/odds_2)
-    st.metric("Arbitrage Percentage", f"{arb_pct*100:.2f}%")
-    
+    st.header("⚖️ Arbitrage Calculator")
+    c1, c2 = st.columns(2)
+    o1 = c1.number_input("Bookie A Odds", value=2.10)
+    o2 = c2.number_input("Bookie B Odds", value=2.10)
+    inv = st.number_input("Total Investment ($)", value=100.0)
+    arb_pct = (1/o1) + (1/o2)
     if arb_pct < 1.0:
-        st.success("✅ ARBITRAGE OPPORTUNITY FOUND!")
-        stake_1 = (total_investment / (odds_1 * arb_pct))
-        stake_2 = (total_investment / (odds_2 * arb_pct))
-        profit = total_investment / arb_pct - total_investment
-        st.write(f"Bet **${stake_1:.2f}** on Bookie A")
-        st.write(f"Bet **${stake_2:.2f}** on Bookie B")
-        st.write(f"**Guaranteed Profit: ${profit:.2f}**")
-    else:
-        st.error("No Arbitrage here. The house has the edge.")
+        st.success(f"Arb Found! Profit: ${(inv/arb_pct)-inv:.2f}")
+    else: st.error(f"No Arb. Market Efficiency: {arb_pct*100:.2f}%")
 
 with tabs[2]:
-    st.header("Kelly Wager & Risk of Ruin")
-    br = st.number_input("Bankroll ($)", value=1000.0)
-    o = st.number_input("Odds", value=2.0, key="k_odds")
+    st.header("Bankroll Manager")
+    br = st.number_input("Current Bankroll ($)", value=1000.0)
+    o = st.number_input("Odds", value=2.0)
     p = st.slider("Win Prob (%)", 1, 100, 52) / 100
-    
-    b_val = o - 1
-    f_star = ((b_val * p) - (1 - p)) / b_val
-    if f_star > 0:
-        st.success(f"Suggested Bet: ${br * f_star * 0.5:.2f}")
-        # Risk of Ruin
-        ror = ((1-p)/p) ** (br / (br * f_star * 0.5))
+    f = (((o-1)*p)-(1-p))/(o-1)
+    if f > 0:
+        st.success(f"Bet Amount: ${br*f*0.5:.2f}")
+        ror = ((1-p)/p) ** (br/(br*f*0.5))
         st.metric("Risk of Ruin", f"{ror*100:.4f}%")
-    else:
-        st.error("Negative Expectancy. Skip this bet.")
+    else: st.error("No Mathematical Edge.")
 
 with tabs[3]:
     st.header("🚀 Goal Path")
-    target = st.number_input("Profit Goal ($)", value=5000.0)
-    if f_star > 0:
-        ev = (p * (br * f_star * 0.5 * (o - 1))) - ((1 - p) * br * f_star * 0.5)
-        bets = math.ceil((target - br) / ev) if ev > 0 else 0
-        st.title(f"{bets} Bets to reach goal")
+    target = st.number_input("Target Bankroll ($)", value=5000.0)
+    if f > 0:
+        ev = (p * (br*f*0.5*(o-1))) - ((1-p)*br*f*0.5)
+        st.title(f"{math.ceil((target-br)/ev) if ev > 0 else 0} Bets to Goal")
 
 with tabs[4]:
-    st.header("📚 Pro Betting Glossary")
-    st.write("**Kelly Criterion:** A formula used to determine the optimal size of a bet to maximize long-term wealth.")
-    st.write("**Arbitrage (Arb):** Placing bets on all possible outcomes of an event across different bookmakers to guarantee a profit.")
-    st.write("**Expected Value (EV):** The average amount a player can expect to win or lose per bet placed on the same odds many times.")
-    st.write("**Risk of Ruin (RoR):** The mathematical probability that you will lose your entire bankroll.")
+    st.header("🛩️ Aviator Pattern Tracker")
+    st.write("Input the last multipliers to find statistical clusters.")
+    raw_data = st.text_input("Enter last 10-20 multipliers (comma separated)", "1.2, 3.5, 1.0, 2.1, 1.8")
+    if raw_data:
+        vals = [float(x.strip()) for x in raw_data.split(",")]
+        lows = sum(1 for x in vals if x < 2.0)
+        st.progress(lows/len(vals), text=f"Cold Streak (Blue) Density: {lows/len(vals)*100:.0f}%")
+        
+        # Streak Counter
+        streak = 0
+        for v in reversed(vals):
+            if v < 2.0: streak += 1
+            else: break
+        if streak >= 3:
+            st.warning(f"⚠️ {streak} LOWS IN A ROW. Statistical 'Purple' (2x+) event is trending upward.")
+        else: st.info("Game is currently in a balanced cycle.")
+
+with tabs[5]:
+    st.header("📚 Glossary")
+    st.markdown("- **Kelly:** Optimizes bet size.\n- **RoR:** Chance of going broke.\n- **Arb:** Guaranteed profit from split odds.\n- **Aviator Cluster:** When the RNG 'balances' after a long streak of low multipliers.")
     st.write("**H2H:** Head-to-Head. The historical record of matches between two specific teams.")
