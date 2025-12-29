@@ -1,7 +1,17 @@
 import streamlit as st
 import requests
 import pandas as pd
-from textblob import TextBlob  # New library for AI sentiment
+from textblob import TextBlob
+import os
+
+# --- CRITICAL FIX FOR STREAMLIT CLOUD ---
+# This downloads the necessary data for sentiment analysis automatically
+try:
+    import nltk
+    nltk.download('punkt_tab') # Lightweight version of the data needed
+except:
+    os.system("python -m textblob.download_corpora lite")
+# ----------------------------------------
 
 # --- CONFIG ---
 API_KEY = "dac17517d43d471e94d2b2484ef5df96"
