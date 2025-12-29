@@ -12,14 +12,26 @@ FB_HEADERS = {'X-Auth-Token': FOOTBALL_KEY}
 
 st.set_page_config(page_title="ProScore AI Global", layout="wide", page_icon="🏟️")
 
-# --- 2. HIGH-CONTRAST CSS OVERRIDE ---
-# This forces dark text on a light background to fix the visibility issues
+# --- 2. NUCLEAR CONTRAST CSS ---
+# This block forces high visibility regardless of the user's system theme
 st.markdown("""
     <style>
-    .stApp { background-color: #ffffff !important; }
-    h1, h2, h3, h4, p, span, li, label, div {
-        color: #001f3f !important; /* Force all text to Dark Navy */
+    /* Force main and sidebar backgrounds to white */
+    .stApp, [data-testid="stSidebar"], .st-emotion-cache-17lntkn {
+        background-color: #ffffff !important;
     }
+    
+    /* Force ALL text to deep navy blue for maximum contrast */
+    h1, h2, h3, h4, h5, h6, p, li, label, span, div, .stMarkdown {
+        color: #001f3f !important;
+    }
+    
+    /* Special fix for Metric labels and values */
+    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
+        color: #001f3f !important;
+    }
+
+    /* Keep header containers dark blue so white text inside works */
     .main-header {
         background-color: #002d62 !important;
         padding: 30px;
@@ -28,13 +40,15 @@ st.markdown("""
         margin-bottom: 25px;
     }
     .main-header h1 { color: #ffffff !important; }
+
+    /* Style the Arbitrage Cards for readability */
     .arb-card {
-        background-color: #f8f9fa !important;
+        background-color: #f0f2f6 !important;
         padding: 20px;
         border-radius: 12px;
         border-left: 10px solid #28a745;
         margin-bottom: 20px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        border: 1px solid #d1d1d1;
     }
     .roi-badge {
         background-color: #28a745 !important;
@@ -42,10 +56,6 @@ st.markdown("""
         padding: 5px 15px;
         border-radius: 20px;
         font-weight: bold;
-    }
-    .stButton>button {
-        background-color: #002d62 !important;
-        color: white !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -87,8 +97,7 @@ if page == "AUTO-ARB SCANNER":
             data = requests.get(url).json()
             found = False
             for event in data:
-                best = {"1": 0, "2": 0, "X": 0}
-                bk = {"1": "", "2": "", "X": ""}
+                best = {"1": 0, "2": 0, "X": 0}; bk = {"1": "", "2": "", "X": ""}
                 for b in event['bookmakers']:
                     for m in b['markets']:
                         for o in m['outcomes']:
@@ -98,6 +107,7 @@ if page == "AUTO-ARB SCANNER":
                                 best["2"], bk["2"] = o['price'], b['title']
                             elif o['name'] == "Draw" and o['price'] > best["X"]:
                                 best["X"], bk["X"] = o['price'], b['title']
+                
                 inv_p = (1/best["1"]) + (1/best["2"]) + (1/best["X"] if best["X"] > 0 else 0)
                 if inv_p < 1.0:
                     found = True
@@ -105,7 +115,7 @@ if page == "AUTO-ARB SCANNER":
                     st.markdown(f"""
                     <div class="arb-card">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <h3 style="margin:0;">{event['home_team']} vs {event['away_team']}</h3>
+                            <h3 style="margin:0; color:#001f3f !important;">{event['home_team']} vs {event['away_team']}</h3>
                             <span class="roi-badge">{roi:.2f}% ROI</span>
                         </div>
                         <p style="margin-top:10px;">🏠 <b>{event['home_team']}:</b> {best['1']} at {bk['1']}</p>
@@ -115,9 +125,6 @@ if page == "AUTO-ARB SCANNER":
                         <h4 style="color:#28a745 !important;">Guaranteed Profit: ${(stake/inv_p - stake):.2f}</h4>
                     </div>
                     """, unsafe_allow_html=True)
-                    if st.button(f"Confirm {event['home_team']} Log"):
-                        st.session_state.history.append({"Date": datetime.now().strftime("%Y-%m-%d %H:%M"), "Match": f"{event['home_team']} vs {event['away_team']}", "Profit": (stake/inv_p - stake), "ROI": roi})
-                        st.toast("Bet Logged!")
             if not found: st.info("Scanning complete. No arbitrage windows open currently.")
         except: st.error("API Limit reached.")
 
@@ -126,28 +133,23 @@ elif page == "LIVE PULSE":
     st.markdown('<div class="main-header"><h1>🕒 LIVE PULSE</h1></div>', unsafe_allow_html=True)
     sport_type = st.radio("Select Feed", ["Football (Soccer)", "NBA Basketball"], horizontal=True)
     
-    @st.fragment(run_every=30)
-    def update_scores():
-        if sport_type == "Football (Soccer)":
-            try:
-                res = requests.get("https://api.football-data.org/v4/matches", headers=FB_HEADERS).json()
-                matches = res.get('matches', [])
-                for m in matches[:10]:
-                    score_h = m['score']['fullTime']['home'] if m['score']['fullTime']['home'] is not None else "-"
-                    score_a = m['score']['fullTime']['away'] if m['score']['fullTime']['away'] is not None else "-"
-                    st.write(f"⚽ **{m['homeTeam']['name']}** {score_h} - {score_a} **{m['awayTeam']['name']}** | Status: `{m['status']}`")
-            except: st.error("Football feed connection issue.")
-        else:
-            try:
-                url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/scores/?apiKey={ODDS_API_KEY}"
-                data = requests.get(url).json()
-                for s in data[:10]:
-                    score_str = "UPCOMING"
-                    if s.get('scores'):
-                        score_str = f"{s['scores'][0]['score']} - {s['scores'][1]['score']}"
-                    st.write(f"🏀 **{s['home_team']}** vs **{s['away_team']}** | `{score_str}`")
-            except: st.error("NBA feed connection issue.")
-    update_scores()
+    if sport_type == "Football (Soccer)":
+        try:
+            res = requests.get("https://api.football-data.org/v4/matches", headers=FB_HEADERS).json()
+            matches = res.get('matches', [])
+            for m in matches[:10]:
+                score_h = m['score']['fullTime']['home'] if m['score']['fullTime']['home'] is not None else "-"
+                score_a = m['score']['fullTime']['away'] if m['score']['fullTime']['away'] is not None else "-"
+                st.markdown(f"⚽ **{m['homeTeam']['name']}** {score_h} - {score_a} **{m['awayTeam']['name']}** | Status: `{m['status']}`")
+        except: st.error("Football feed connection issue.")
+    else:
+        try:
+            url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/scores/?apiKey={ODDS_API_KEY}"
+            data = requests.get(url).json()
+            for s in data[:10]:
+                score_str = f"{s['scores'][0]['score']} - {s['scores'][1]['score']}" if s.get('scores') else "UPCOMING"
+                st.markdown(f"🏀 **{s['home_team']}** vs **{s['away_team']}** | `{score_str}`")
+        except: st.error("NBA feed connection issue.")
 
 # --- 8. MODULE: BANKROLL ANALYTICS ---
 elif page == "BANKROLL ANALYTICS":
@@ -155,12 +157,8 @@ elif page == "BANKROLL ANALYTICS":
     if st.session_state.history:
         df = pd.DataFrame(st.session_state.history)
         df['Cumulative'] = df['Profit'].cumsum()
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Profit", f"${df['Profit'].sum():.2f}")
-        m2.metric("Average ROI", f"{df['ROI'].mean():.2f}%")
-        m3.metric("Trades Executed", len(df))
         st.line_chart(df, x="Date", y="Cumulative")
         st.download_button("📥 Export Excel History", data=get_excel_download(df), file_name="proscore_report.xlsx")
     else:
         st.info("No trades logged yet. Start scanning to see your growth chart!")
-                                
+                            
