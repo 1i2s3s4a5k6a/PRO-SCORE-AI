@@ -3,3 +3,6 @@ requests
 pandas
 numpy
 xlsxwriter
+mailchimp3
+stripe
+
