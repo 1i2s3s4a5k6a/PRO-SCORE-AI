@@ -2,5 +2,4 @@ streamlit
 requests
 pandas
 streamlit-autorefresh
-mailchimp3
 
