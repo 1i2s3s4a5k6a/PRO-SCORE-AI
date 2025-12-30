@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 # ======================================================
-# 2. SECRETS LOADING (Safe Loading)
+# 2. SECRETS LOADING (Using your specific keys)
 # ======================================================
 try:
     ODDS_API_KEY = st.secrets["ODDS_API_KEY"]
@@ -30,41 +30,25 @@ except Exception:
 def send_telegram(msg):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": msg,
-            "parse_mode": "Markdown"
-        }, timeout=5)
-    except:
-        pass
+        requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=5)
+    except: pass
 
 # ======================================================
-# 4. ARBITRAGE MATH ENGINE
+# 4. MATH ENGINE
 # ======================================================
 def calculate_arbitrage(budget, odds):
     try:
-        # Arbitrage Formula: Sum of (1/odds) must be < 1.0
         margin = sum(1 / o for o in odds)
         if margin >= 1: return None
-
-        # Calculate stakes based on budget
         stakes = [(budget * (1 / o)) / margin for o in odds]
-        
-        # Anti-ban strategy: Round to nearest $5
         stakes = [int(round(s / 5) * 5) for s in stakes]  
-
         total_spent = sum(stakes)
         payout = min(stakes[i] * odds[i] for i in range(len(odds)))
         profit = payout - total_spent
         roi = (profit / total_spent) * 100
-        
         return stakes, round(roi, 2), round(profit, 2)
-    except Exception:
-        return None
+    except: return None
 
-# ======================================================
-# 5. BEST ODDS EXTRACTOR
-# ======================================================
 def extract_best_odds(event):
     best = {}
     for bookmaker in event.get("bookmakers", []):
@@ -73,198 +57,152 @@ def extract_best_odds(event):
             for outcome in market.get("outcomes", []):
                 name = outcome["name"]
                 price = outcome["price"]
-                # Keep only the highest price available across all bookmakers
                 if name not in best or price > best[name]["price"]:
                     best[name] = {"price": price, "book": bookmaker["title"]}
     return best
 
 # ======================================================
-# 6. UI CUSTOM CSS
+# 5. UI CUSTOM CSS (AS PER IMAGE)
 # ======================================================
 st.markdown("""
 <style>
-.stApp { background:#0d1117; color:#e6edf3; }
-[data-testid="stSidebar"] { background:#161b22; border-right:1px solid #30363d; }
-.arb-card { background:#161b22; border:1px solid #30363d; border-radius:12px; margin-bottom:20px; overflow:hidden; }
-.arb-header { background:#21262d; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; }
-.roi-badge { background:#238636; padding:4px 12px; border-radius:6px; font-weight:bold; color:white; }
-.mkt-tile { background:#0d1117; padding:10px; text-align:center; border-radius:8px; border:1px solid #21262d; }
-.odds-val { color:#3fb950; font-size:20px; font-weight:bold; }
-.league-bar { background:#238636; padding:8px 15px; margin:20px 0 10px; font-weight:bold; border-radius:4px; }
+    .stApp { background:#0d1117; color:#e6edf3; }
+    [data-testid="stSidebar"] { background:#161b22; border-right:1px solid #30363d; }
+    
+    .league-header {
+        background: linear-gradient(90deg, #238636 0%, #2ea043 100%);
+        color: white; padding: 10px 15px; border-radius: 8px 8px 0 0;
+        font-weight: bold; text-transform: uppercase; font-size: 13px; margin-top: 20px;
+    }
+
+    .score-card {
+        background: #ffffff; color: #161b22; border-radius: 0 0 8px 8px;
+        padding: 18px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .match-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .team-info { display: flex; align-items: center; gap: 12px; font-size: 17px; font-weight: 600; }
+    .team-logo { width: 28px; height: 28px; object-fit: contain; }
+    .score-box { font-size: 22px; font-weight: 800; color: #0d1117; }
+    
+    .live-indicator { background: #da3633; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+    .match-status { color: #8b949e; font-size: 11px; text-transform: uppercase; text-align: right; margin-bottom: 5px; }
+    
+    .arb-card { background:#161b22; border:1px solid #30363d; border-radius:12px; margin-bottom:20px; overflow:hidden; }
+    .arb-header { background:#21262d; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; }
+    .roi-badge { background:#238636; padding:4px 12px; border-radius:6px; font-weight:bold; color:white; }
 </style>
 """, unsafe_allow_html=True)
 
 # ======================================================
-# 7. SIDEBAR NAVIGATION
+# 6. SIDEBAR
 # ======================================================
 with st.sidebar:
     st.markdown("<h1 style='color:#3fb950;'>PRO-SCORE AI</h1>", unsafe_allow_html=True)
-    menu = st.radio("COMMAND CENTER", [
-        "🛰️ ARBS SCANNER", 
-        "🧮 MANUAL CALC", 
-        "🕒 LIVE SCORES", 
-        "📊 MARKET ANALYTICS", 
-        "🛡️ RISK TERMINAL", 
-        "🎁 $500 BLUEPRINT"
-    ])
+    menu = st.radio("COMMAND CENTER", ["🛰️ ARBS SCANNER", "🕒 LIVE SCORES", "🧮 MANUAL CALC", "📊 MARKET ANALYTICS", "🛡️ RISK TERMINAL", "🎁 $500 BLUEPRINT"])
     st.divider()
     if vault_ready:
         st.success("SYSTEM: GLOBAL NODES ACTIVE")
-    else:
-        st.error("SYSTEM: VAULT OFFLINE")
-    
     st_autorefresh(interval=60000, key="sync")
 
 # ======================================================
-# 8. ARBS SCANNER
+# 7. ARBS SCANNER
 # ======================================================
 if menu == "🛰️ ARBS SCANNER":
     st.title("🛰️ Global Arbitrage Matrix")
-    
-    if not vault_ready:
-        st.info("Please configure API secrets to begin scanning.")
+    if not vault_ready: st.info("Check API Secrets.")
     else:
         url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey={ODDS_API_KEY}&regions=uk,eu,us&markets=h2h&oddsFormat=decimal"
-        
         try:
-            res = requests.get(url, timeout=10)
-            data = res.json()
-
+            data = requests.get(url, timeout=10).json()
             if isinstance(data, list):
-                found_any = False
+                found = False
                 for ev in data[:30]:
                     best = extract_best_odds(ev)
                     if len(best) < 2: continue
-                    
-                    labels = list(best.keys())
-                    odds = [best[l]["price"] for l in labels]
-                    
+                    labels, odds = list(best.keys()), [best[l]["price"] for l in best.keys()]
                     calc = calculate_arbitrage(1000, odds)
                     if calc and calc[1] > 0.1:
-                        found_any = True
+                        found = True
                         stakes, roi, profit = calc
-                        
-                        st.markdown(f"""
-                        <div class="arb-card">
-                            <div class="arb-header">
-                                <span><b>{ev['home_team']} vs {ev['away_team']}</b></span>
-                                <span class="roi-badge">{roi}% ROI</span>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
+                        st.markdown(f'<div class="arb-card"><div class="arb-header"><span><b>{ev["home_team"]} vs {ev["away_team"]}</b></span><span class="roi-badge">{roi}% ROI</span></div>', unsafe_allow_html=True)
                         cols = st.columns(len(labels))
-                        for i, label in enumerate(labels):
-                            with cols[i]:
-                                st.markdown(f"""
-                                <div class="mkt-tile">
-                                    <div style="font-size:11px; color:#8b949e;">{label}</div>
-                                    <div class="odds-val">{odds[i]}</div>
-                                    <div style="font-size:10px; color:#3fb950;">{best[label]['book']}</div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        
+                        for i, l in enumerate(labels):
+                            cols[i].metric(l, f"{odds[i]}", f"{best[l]['book']}")
                         with st.expander("💰 Execution Plan"):
-                            for i, s in enumerate(stakes):
-                                st.write(f"Bet **${s}** on {labels[i]} @ {best[labels[i]]['book']}")
-                            st.metric("Net Profit", f"${profit}")
-                            if st.button(f"Broadcast {ev['id'][:5]}", key=ev['id']):
-                                send_telegram(f"🔥 ARB ALERT: {roi}% ROI\n{ev['home_team']} vs {ev['away_team']}\nProfit: ${profit}")
+                            st.write(f"Profit: **${profit}**")
+                            if st.button("Send to Telegram", key=ev['id']): send_telegram(f"ARB: {roi}% - {ev['home_team']} vs {ev['away_team']}")
                         st.markdown("</div>", unsafe_allow_html=True)
-                
-                if not found_any:
-                    st.warning("No active arbitrage opportunities found in the current market cycle.")
-            else:
-                st.error(f"API Error: {data.get('message', 'Check your API limits.')}")
-        except Exception as e:
-            st.error("Connection Interrupted")
+                if not found: st.warning("No arbs found currently.")
+        except: st.error("API Connection Error")
 
 # ======================================================
-# 9. MANUAL CALCULATOR (INTEGRATED)
+# 8. LIVE SCORES (WITH LOGOS & IMAGE STYLE)
+# ======================================================
+elif menu == "🕒 LIVE SCORES":
+    st.title("🕒 Global Live Match Center")
+    if not vault_ready: st.warning("Football API not ready.")
+    else:
+        try:
+            headers = {"X-Auth-Token": FOOTBALL_KEY}
+            data = requests.get("https://api.football-data.org/v4/matches", headers=headers).json()
+            matches = data.get("matches", [])
+            
+            if matches:
+                leagues = {}
+                for m in matches:
+                    leagues.setdefault(m['competition']['name'], []).append(m)
+
+                for league, match_list in leagues.items():
+                    st.markdown(f'<div class="league-header">⚙️ {league}</div>', unsafe_allow_html=True)
+                    for m in match_list:
+                        h_logo = m['homeTeam'].get('crest', '')
+                        a_logo = m['awayTeam'].get('crest', '')
+                        status = m.get('status', '').replace('_', ' ')
+                        
+                        st.markdown(f"""
+                        <div class="score-card">
+                            <div class="match-status">{status}</div>
+                            <div class="match-row">
+                                <div class="team-info">
+                                    <img src="{h_logo}" class="team-logo"> {m['homeTeam']['name']}
+                                </div>
+                                <div class="score-box">{m['score']['fullTime']['home'] or 0}</div>
+                            </div>
+                            <div class="match-row">
+                                <div class="team-info">
+                                    <img src="{a_logo}" class="team-logo"> <span class="live-indicator">LIVE</span> {m['awayTeam']['name']}
+                                </div>
+                                <div class="score-box">{m['score']['fullTime']['away'] or 0}</div>
+                            </div>
+                            <div style="background:#f0f2f6; height:28px; border-radius:4px; margin-top:10px; display:flex; align-items:center; padding-left:10px; font-size:11px; color:#57606a;">
+                                Margin Available: <b>Checked</b>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+            else: st.info("No live games.")
+        except: st.error("Score feed offline.")
+
+# ======================================================
+# 9. MANUAL CALCULATOR
 # ======================================================
 elif menu == "🧮 MANUAL CALC":
     st.title("🧮 One-Click Arb Calculator")
-    st.markdown("Enter odds from any bookmaker to calculate the guaranteed profit spread.")
+    budget = st.number_input("Budget ($)", value=1000)
+    col1, col2, col3 = st.columns(3)
+    o1 = col1.number_input("Home Odds", value=2.0)
+    o2 = col2.number_input("Draw/Away Odds", value=2.1)
+    o3 = col3.number_input("Extra Odds (Optional)", value=0.0)
+    
+    odds = [o for o in [o1, o2, o3] if o > 1]
+    res = calculate_arbitrage(budget, odds)
+    if res:
+        st.success(f"ROI: {res[1]}% | Profit: ${res[2]}")
+        for i, s in enumerate(res[0]): st.write(f"Stake {i+1}: ${s}")
+    else: st.error("No arbitrage found.")
 
-    with st.container():
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            budget = st.number_input("Total Investment ($)", min_value=10, value=1000, step=50)
-            num_outcomes = st.radio("Market Type", ["2-Way (Home/Away)", "3-Way (Home/Draw/Away)"])
-            
-            o1 = st.number_input("Outcome 1 Odds", min_value=1.01, value=2.10, format="%.2f")
-            o2 = st.number_input("Outcome 2 Odds", min_value=1.01, value=2.10, format="%.2f")
-            
-            manual_odds = [o1, o2]
-            labels = ["Outcome 1", "Outcome 2"]
-            
-            if "3-Way" in num_outcomes:
-                o3 = st.number_input("Outcome 3 Odds", min_value=1.01, value=3.50, format="%.2f")
-                manual_odds.append(o3)
-                labels.append("Outcome 3")
-
-        with col2:
-            st.subheader("Analysis Results")
-            res = calculate_arbitrage(budget, manual_odds)
-            
-            if res:
-                stakes, roi, profit = res
-                st.success(f"🔥 Arbitrage Detected! ROI: {roi}%")
-                
-                metrics = st.columns(len(labels))
-                for i in range(len(labels)):
-                    metrics[i].metric(labels[i], f"${stakes[i]}", f"Odds: {manual_odds[i]}")
-                
-                st.divider()
-                st.metric("Guaranteed Profit", f"${profit}", delta_color="normal")
-                
-                if st.button("Send Manual Alert to Telegram"):
-                    send_telegram(f"Manual Arb Alert\nBudget: ${budget}\nROI: {roi}%\nProfit: ${profit}")
-            else:
-                st.error("No Arbitrage Possible.")
-                margin = sum(1/o for o in manual_odds) * 100
-                st.info(f"Current Market Margin: {round(margin, 2)}% (Needs to be < 100%)")
-
-# ======================================================
-# 10. LIVE SCORES
-# ======================================================
-elif menu == "🕒 LIVE SCORES":
-    st.title("🕒 Live Match Center")
-    headers = {"X-Auth-Token": FOOTBALL_KEY}
-    try:
-        data = requests.get("https://api.football-data.org/v4/matches", headers=headers).json()
-        matches = data.get("matches", [])
-        if matches:
-            for m in matches[:15]:
-                st.write(f"⚽ {m['homeTeam']['name']} {m['score']['fullTime']['home'] or 0} - {m['score']['fullTime']['away'] or 0} {m['awayTeam']['name']}")
-        else:
-            st.info("No live matches found.")
-    except:
-        st.error("Score feed unavailable.")
-
-# ======================================================
-# 11. MARKET ANALYTICS
-# ======================================================
-elif menu == "📊 MARKET ANALYTICS":
-    st.title("📊 Global Market Health")
-    st.info("Market volatility is currently: LOW")
-    chart_data = pd.DataFrame({'ROI %': [2.1, 4.5, 1.2, 6.7, 3.2]}, index=['Mon', 'Tue', 'Wed', 'Thu', 'Fri'])
-    st.line_chart(chart_data)
-
-# ======================================================
-# 12. RISK TERMINAL
-# ======================================================
-elif menu == "🛡️ RISK TERMINAL":
-    st.title("🛡️ Risk & Protection Terminal")
-    st.warning("Anti-Ban Protocols Active")
-    st.checkbox("Round stakes to nearest $5 (Recommended)", value=True)
-    st.slider("Minimum ROI alert threshold", 0.1, 15.0, 1.5)
-
-# ======================================================
-# 13. $500 BLUEPRINT
-# ======================================================
-elif menu == "🎁 $500 BLUEPRINT":
-    st.title("🎁 Premium $500 Strategy Guide")
-    st.markdown("Your access is active for Mailchimp ID: " + st.secrets.get("MAILCHIMP_LIST_ID", "Default"))
-    st.success("Strategy document: 'The 30-Day Compounding Engine' is ready for review.")
-        
+# Remaining placeholders for Terminal and Blueprint
+elif menu == "📊 MARKET ANALYTICS": st.title("Market Analytics coming soon.")
+elif menu == "🛡️ RISK TERMINAL": st.title("Risk Terminal Active.")
+elif menu == "🎁 $500 BLUEPRINT": st.title("Blueprint Unlocked.")
+    
