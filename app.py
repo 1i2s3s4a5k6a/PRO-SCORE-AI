@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import sqlite3
 import hashlib
+import os
 from streamlit_autorefresh import st_autorefresh
 
 # ======================================================
@@ -19,28 +20,17 @@ st.markdown("""
 <style>
     .stApp { background:#0d1117; color:#e6edf3; }
     [data-testid="stSidebar"] { background:#161b22; border-right:1px solid #30363d; }
-    
-    /* League Header Styling */
-    .league-header {
-        background: linear-gradient(90deg, #238636 0%, #2ea043 100%);
+    .league-header { background: linear-gradient(90deg, #238636 0%, #2ea043 100%);
         color: white; padding: 10px 15px; border-radius: 8px 8px 0 0;
-        font-weight: bold; text-transform: uppercase; font-size: 13px; margin-top: 20px;
-    }
-
-    /* Score Card Styling */
-    .score-card {
-        background: #ffffff; color: #161b22; border-radius: 0 0 8px 8px;
-        padding: 18px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-
+        font-weight: bold; text-transform: uppercase; font-size: 13px; margin-top: 20px;}
+    .score-card { background: #ffffff; color: #161b22; border-radius: 0 0 8px 8px;
+        padding: 18px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);}
     .match-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .team-info { display: flex; align-items: center; gap: 12px; font-size: 17px; font-weight: 600; }
     .team-logo { width: 28px; height: 28px; object-fit: contain; }
     .score-box { font-size: 22px; font-weight: 800; color: #0d1117; }
-    
     .live-indicator { background: #da3633; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
     .match-status { color: #8b949e; font-size: 11px; text-transform: uppercase; text-align: right; margin-bottom: 5px; }
-    
     .arb-card { background:#161b22; border:1px solid #30363d; border-radius:12px; margin-bottom:20px; overflow:hidden; }
     .arb-header { background:#21262d; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; }
     .roi-badge { background:#238636; padding:4px 12px; border-radius:6px; font-weight:bold; color:white; }
@@ -48,13 +38,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ======================================================
-# 2. SECRETS (Using Your Information)
+# 2. SECRETS (from Environment Variables)
 # ======================================================
-ODDS_API_KEY = "4dddf9e30c2f645e609beddeaec61540"
-FOOTBALL_KEY = "dac17517d43d471e94d2b2484ef5df96"
-TELEGRAM_TOKEN = "6787595786:AAFQ3SwzeTF_TgLechcQGuc-CXCDSOskrm4"
-TELEGRAM_CHAT_ID = "1940722109"
-VAULT_READY = True
+ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
+FOOTBALL_KEY = os.environ.get("FOOTBALL_API_KEY")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+VAULT_READY = bool(os.environ.get("VAULT_READY", "True"))
+
+if not (ODDS_API_KEY and FOOTBALL_KEY and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
+    st.error("One or more API keys / tokens are not set. Please update your .env file.")
+    st.stop()
 
 # ======================================================
 # 3. DATABASE + AUTH
@@ -72,6 +66,7 @@ def init_db():
     conn.close()
 
 def create_user(email, password):
+    if not email or not password: return
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO users VALUES (?,?,?)", (email, hash_pw(password), "ELITE"))
@@ -79,6 +74,7 @@ def create_user(email, password):
     conn.close()
 
 def login_user(email, password):
+    if not email or not password: return None
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute("SELECT plan FROM users WHERE email=? AND password=?", (email, hash_pw(password)))
@@ -95,7 +91,9 @@ def send_telegram(msg):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": msg}, timeout=5)
-    except: pass
+    except Exception as ex:
+        # In production, consider logging exception details to a secure sink
+        pass
 
 def calculate_arbitrage(bankroll, odds):
     margin = sum(1 / o for o in odds)
@@ -134,7 +132,8 @@ if not st.session_state.user_plan:
             if plan:
                 st.session_state.user_plan = plan
                 st.rerun()
-            else: st.error("Invalid credentials")
+            else:
+                st.error("Invalid credentials")
     with colB:
         st.info("Don't have an account?")
         if st.button("Register as Elite Trader"):
@@ -148,7 +147,6 @@ if not st.session_state.user_plan:
 with st.sidebar:
     st.markdown("<h1 style='color:#3fb950;'>PRO-SCORE AI</h1>", unsafe_allow_html=True)
     st.caption(f"Status: {st.session_state.user_plan} ACTIVE")
-    
     menu = st.radio("NAVIGATION", [
         "🛰️ Arbitrage Scanner",
         "🔴 Live Match Center",
@@ -180,7 +178,8 @@ if menu == "🛰️ Arbitrage Scanner":
                     if st.button(f"Alert Telegram", key=ev["id"]):
                         send_telegram(f"ARB FOUND: {ev['home_team']} vs {ev['away_team']} | ROI: {calc[1]}%")
                     st.markdown("</div>", unsafe_allow_html=True)
-    except: st.error("API Limit reached or error.")
+    except Exception:
+        st.error("API Limit reached or error.")
 
 elif menu == "🔴 Live Match Center":
     st.title("🔴 Live Match Center")
@@ -202,7 +201,8 @@ elif menu == "🔴 Live Match Center":
                         <div class="match-row"><div class="team-info"><img src="{a_logo}" class="team-logo"> <span class="live-indicator">LIVE</span> {m['awayTeam']['name']}</div><div class="score-box">{m['score']['fullTime']['away'] or 0}</div></div>
                     </div>
                     """, unsafe_allow_html=True)
-    except: st.error("Score feed unavailable.")
+    except Exception:
+        st.error("Score feed unavailable.")
 
 elif menu == "🧮 Manual Calculator":
     st.title("🧮 Manual Calculator")
@@ -227,4 +227,3 @@ elif menu == "⚙️ System Status":
     if st.button("Logout"):
         st.session_state.user_plan = None
         st.rerun()
-    
