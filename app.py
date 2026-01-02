@@ -73,6 +73,7 @@ page = st.query_params.get("p", "live")
 # =========================================================
 db = sqlite3.connect("proscore.db", check_same_thread=False)
 cur = db.cursor()
+db = sqlite3.connect("proscore.db", check_same_thread=False)
 
 cur.execute("""
 CREATE TABLE IF NOT EXISTS affiliate_clicks (
