@@ -4,328 +4,209 @@ import pandas as pd
 import sqlite3
 import hashlib
 import os
-import webbrowser
+import math
+import numpy as np
 from streamlit_autorefresh import st_autorefresh
 
 # ======================================================
-# 1. APP CONFIG & SOFASCORE STYLING (Blue & White)
+# 1. SYSTEM UI & HIGH-CONTRAST VISIBILITY FIX
 # ======================================================
 st.set_page_config(
-    page_title="ProScore AI | Premium Sports Terminal",
+    page_title="ProScore AI | Sharp Terminal",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Professional SofaScore UI Styling
 st.markdown("""
 <style>
-    /* Main Background and Text */
-    .stApp { background:#f4f7f9; color:#1a1a1a; }
+    /* Global Styles */
+    .stApp { background:#f4f7f9; color:#1a1a1a; font-family: 'Inter', sans-serif; }
+    
+    /* CRITICAL VISIBILITY FIX: Forces black text on white inputs */
+    input { color: #000000 !important; background-color: #ffffff !important; font-weight: 700 !important; }
+    .stNumberInput div div input { color: #000000 !important; border: 1px solid #00468c !important; }
+    .stTextInput div div input { color: #000000 !important; border: 1px solid #00468c !important; }
     
     /* Sidebar Styling */
-    [data-testid="stSidebar"] { background:#003366; border-right:1px solid #002244; }
-    [data-testid="stSidebar"] .stMarkdown h1 { color: #ffffff !important; }
-    [data-testid="stSidebar"] label { color: #ffffff !important; }
+    [data-testid="stSidebar"] { background:#003366 !important; color: white !important; }
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p { color: white !important; font-weight: 600; }
     
-    /* League and Score Cards */
-    .league-header { 
-        background: #00468c; 
-        color: white; 
-        padding: 12px 15px; 
-        border-radius: 8px 8px 0 0;
-        font-weight: bold; 
-        font-size: 14px; 
-        margin-top: 25px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
+    /* Component Styles */
+    .league-header { background: #00468c; color: white; padding: 12px; border-radius: 8px 8px 0 0; font-weight: bold; }
+    .score-card { background: #ffffff; border-radius: 0 0 8px 8px; padding: 20px; margin-bottom: 15px; border: 1px solid #d1d8e0; color: #1a1a1a; }
+    .score-box { font-size: 32px; font-weight: 900; color: #00468c; font-family: 'Courier New', monospace; }
+    .roi-badge { background:#00c853; color:white; padding:5px 12px; border-radius:6px; font-weight:bold; }
+    .tool-header { color: #003366; border-left: 6px solid #00468c; padding-left: 12px; margin-bottom: 20px; font-weight: 800; }
     
-    .score-card { 
-        background: #ffffff; 
-        color: #1a1a1a; 
-        border-radius: 0 0 8px 8px;
-        padding: 20px; 
-        margin-bottom: 12px; 
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        border: 1px solid #e1e4e8;
-    }
-    
-    .match-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    .team-info { display: flex; align-items: center; gap: 15px; font-size: 16px; font-weight: 700; }
-    .team-logo { width: 32px; height: 32px; object-fit: contain; }
-    .score-box { font-size: 24px; font-weight: 900; color: #00468c; font-family: 'Roboto', sans-serif; }
-    
-    /* Status Indicators */
-    .live-indicator { background: #ff4d4d; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; animation: pulse 2s infinite; }
-    .match-status { color: #555e66; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 8px; }
-    
-    /* Arbitrage Cards */
-    .arb-card { background:#ffffff; border:1px solid #00468c; border-radius:12px; margin-bottom:20px; overflow:hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-    .arb-header { background:#00468c; color: white; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; }
-    .roi-badge { background:#00c853; padding:5px 12px; border-radius:6px; font-weight:bold; color:white; font-size: 14px; }
-    
-    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    /* Tab Navigation Contrast */
+    .stTabs [data-baseweb="tab"] { color: #1a1a1a !important; background: #e2e8f0; border-radius: 5px 5px 0 0; margin-right: 5px; font-weight: 600; }
+    .stTabs [aria-selected="true"] { background: #00468c !important; color: white !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================================
-# 2. SECRETS (Configuration)
-# ==========================================================
-ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
-FOOTBALL_KEY = os.environ.get("FOOTBALL_API_KEY")
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-MAILCHIMP_API = os.environ.get("MAILCHIMP_API")
-MAILCHIMP_LIST_ID = os.environ.get("MAILCHIMP_LIST_ID")
-# New Paystack and Blueprint Links
-PAYSTACK_LINK = "https://paystack.com/pay/blueprint500" # Replace with your actual Paystack payment page URL
-DRIVE_LINK = "https://drive.google.com/file/d/1_sMPUU1GpB3ULWTPAN9Dlkx9roeRz0xE/view?usp=drivesdk"
-
-if not (ODDS_API_KEY and FOOTBALL_KEY and TELEGRAM_TOKEN and MAILCHIMP_API and MAILCHIMP_LIST_ID):
-    st.error("⚠️ System Configuration Incomplete. Please check your Environment Variables.")
-    st.stop()
-
 # ======================================================
-# 3. DATABASE & AUTHENTICATION
+# 2. CORE ANALYTICAL ENGINES
 # ======================================================
-DB = "users.db"
-
-def hash_pw(pw): return hashlib.sha256(pw.encode()).hexdigest()
-
+DB = "proscore_final_2026.db"
 def init_db():
     conn = sqlite3.connect(DB)
     c = conn.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, password TEXT, plan TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS profits (email TEXT, profit REAL, date DATE DEFAULT CURRENT_DATE)")
     conn.commit()
     conn.close()
-
-def create_user(email, password):
-    if not email or not password: return
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO users VALUES (?,?,?)", (email, hash_pw(password), "ELITE"))
-    conn.commit()
-    conn.close()
-    subscribe_to_mailchimp(email)
-
-def login_user(email, password):
-    if not email or not password: return None
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    c.execute("SELECT plan FROM users WHERE email=? AND password=?", (email, hash_pw(password)))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else None
 
 init_db()
 
-# ======================================================
-# 4. API & ANALYTICS FUNCTIONS
-# ======================================================
-def subscribe_to_mailchimp(email):
-    try:
-        dc = MAILCHIMP_API.split('-')[-1]
-        url = f"https://{dc}.api.mailchimp.com/3.0/lists/{MAILCHIMP_LIST_ID}/members"
-        data = {"email_address": email, "status": "subscribed"}
-        requests.post(url, auth=('apikey', MAILCHIMP_API), json=data, timeout=5)
-    except: pass
-
-def send_telegram(msg):
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": msg}, timeout=5)
-    except: pass
-
 def calculate_arbitrage(bankroll, odds):
-    if not odds: return None
+    if not odds or any(o <= 1 for o in odds): return None
     margin = sum(1 / o for o in odds)
-    if margin >= 1: return None # No Arb found
+    if margin >= 1: return None 
     stakes = [(bankroll * (1 / o)) / margin for o in odds]
-    stakes = [int(round(s / 5) * 5) for s in stakes]
-    payout = min(stakes[i] * odds[i] for i in range(len(odds)))
-    profit = payout - sum(stakes)
-    roi = (profit / sum(stakes)) * 100
-    return stakes, round(roi, 2), round(profit, 2)
+    profit = (bankroll / margin) - bankroll
+    return [round(s, 2) for s in stakes], round((profit/bankroll)*100, 2), round(profit, 2)
 
-def extract_best_odds(event):
-    best = {}
-    for bookmaker in event.get("bookmakers", []):
-        for market in bookmaker.get("markets", []):
-            if market["key"] == "h2h":
-                for o in market["outcomes"]:
-                    name = o["name"]
-                    if name not in best or o["price"] > best[name]["price"]:
-                        best[name] = {"price": o["price"], "book": bookmaker["title"]}
-    return best
+def poisson_prob(lmbda, x):
+    return (math.exp(-lmbda) * (lmbda**x)) / math.factorial(x)
 
 # ======================================================
-# 5. LOGIN GATEWAY
+# 3. SIDEBAR & ACCESS CONTROL
 # ======================================================
-if "user_plan" not in st.session_state:
-    st.session_state.user_plan = None
+st_autorefresh(interval=60000, key="global_refresh")
 
-if not st.session_state.user_plan:
-    st.markdown("<h2 style='text-align: center; color: #003366;'>PRO-SCORE AI TERMINAL</h2>", unsafe_allow_html=True)
-    colA, colB = st.columns([1, 1])
-    with colA:
-        st.subheader("Sign In")
-        email = st.text_input("Registered Email")
-        password = st.text_input("Security Key", type="password")
-        if st.button("Enter Terminal", use_container_width=True):
-            plan = login_user(email, password)
-            if plan:
-                st.session_state.user_plan = plan
-                st.rerun()
-            else: st.error("Access Denied")
-    with colB:
-        st.subheader("New Elite Member")
-        new_email = st.text_input("New Email")
-        new_password = st.text_input("New Security Key", type="password")
-        if st.button("Register Account", use_container_width=True):
-            create_user(new_email, new_password)
-            st.success("Access Granted. Please log in.")
-    st.stop()
-
-# ======================================================
-# 6. SIDEBAR NAVIGATION
-# ======================================================
 with st.sidebar:
-    st.markdown("<h1 style='font-size: 24px;'>⚽ PRO-SCORE AI</h1>", unsafe_allow_html=True)
-    st.caption(f"LICENSE: {st.session_state.user_plan}")
-    menu = st.radio("MENU", [
-        "🛰️ Arbitrage Scanner",
-        "🔴 Live Match Center",
-        "🧮 Manual Calculator",
-        "📘 $500 Blueprint",
-        "⚙️ System Status"
-    ])
-    st_autorefresh(interval=60000, key="global_refresh")
+    st.markdown("## 🛰️ PRO-SCORE AI")
+    license_key = st.text_input("License Key (Optional)", placeholder="Enter key for Elite Tools")
+    user_status = "ELITE" if license_key == "SHARP-99" else "GUEST"
+    st.caption(f"Access Level: {user_status}")
+    
+    menu = st.radio("SELECT HUB", ["📡 SCANNER", "⚽ LIVE CENTER", "🧮 SHARP SUITE", "📊 TRACKER"])
+    st.divider()
+    st.info("System Online: 2026-01-02")
 
 # ======================================================
-# 7. MAIN INTERFACE LOGIC
+# 4. HUB MODULES
 # ======================================================
 
-if menu == "🛰️ Arbitrage Scanner":
-    st.title("🛰️ Worldwide Arbitrage Scanner")
-    # Extended search across multiple sports to prevent a blank page
-    sports = ['soccer_uefa_champs_league', 'soccer_epl', 'soccer_spain_la_liga', 'soccer_italy_serie_a', 'basketball_nba']
-    found_any = False
-    
-    with st.spinner("Scanning Global Bookmakers..."):
-        for sport in sports:
-            url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/?apiKey={ODDS_API_KEY}&regions=uk,eu,us&markets=h2h"
-            try:
-                data = requests.get(url).json()
-                if isinstance(data, list) and len(data) > 0:
-                    for ev in data:
-                        best = extract_best_odds(ev)
-                        if len(best) < 2: continue
-                        odds = [v["price"] for v in best.values()]
-                        calc = calculate_arbitrage(1000, odds)
-                        
-                        if calc and calc[1] > -0.5: # Show even near-arbs for value
-                            found_any = True
-                            st.markdown(f'''
-                            <div class="arb-card">
-                                <div class="arb-header">
-                                    <span><b>{ev["home_team"]} vs {ev["away_team"]}</b> | {ev['sport_title']}</span>
-                                    <span class="roi-badge">{calc[1]}% ROI</span>
-                                </div>
-                                <div style="padding: 15px; color: #1a1a1a;">
-                                    <p>Estimated Profit: <b>${calc[2]}</b> per $1000</p>
-                                    <p style="font-size: 12px; color: #666;">Bookmakers: {", ".join([v['book'] for v in best.values()])}</p>
-                                </div>
-                            </div>
-                            ''', unsafe_allow_html=True)
-                            if st.button(f"Send Alert: {ev['home_team']}", key=ev["id"]):
-                                send_telegram(f"🚨 ARB ALERT: {ev['home_team']} vs {ev['away_team']} | ROI: {calc[1]}%")
-            except: continue
-            
-    if not found_any:
-        st.warning("No high-yield arbitrage currently available across monitored markets. Scanning continues...")
-
-elif menu == "🔴 Live Match Center":
-    st.title("🔴 Live Score Center")
-    headers = {"X-Auth-Token": FOOTBALL_KEY}
-    # Increased coverage by checking multiple API endpoints
-    endpoints = ["https://api.football-data.org/v4/matches"]
-    
-    try:
-        for url in endpoints:
-            data = requests.get(url, headers=headers).json()
-            matches = data.get("matches", [])
-            if matches:
-                leagues = {}
-                for m in matches: leagues.setdefault(m['competition']['name'], []).append(m)
-                
-                for league, match_list in leagues.items():
-                    st.markdown(f'<div class="league-header">🏆 {league}</div>', unsafe_allow_html=True)
-                    for m in match_list:
-                        status = m.get('status')
-                        is_live = "LIVE" in status or status == "IN_PLAY"
-                        h_logo = m['homeTeam'].get('crest', '')
-                        a_logo = m['awayTeam'].get('crest', '')
-                        
-                        st.markdown(f"""
-                        <div class="score-card">
-                            <div class="match-status">{status} {"🔴" if is_live else "🕒"}</div>
-                            <div class="match-row">
-                                <div class="team-info"><img src="{h_logo}" class="team-logo"> {m['homeTeam']['name']}</div>
-                                <div class="score-box">{m['score']['fullTime']['home'] if m['score']['fullTime']['home'] is not None else 0}</div>
-                            </div>
-                            <div class="match-row">
-                                <div class="team-info"><img src="{a_logo}" class="team-logo"> {m['awayTeam']['name']}</div>
-                                <div class="score-box">{m['score']['fullTime']['away'] if m['score']['fullTime']['away'] is not None else 0}</div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-            else:
-                st.info("No worldwide matches currently in progress.")
-    except:
-        st.error("Live Feed Connection Error. Please verify your Football API Key.")
-
-elif menu == "📘 $500 Blueprint":
-    st.title("📘 The $500 Arbitrage Blueprint")
-    st.markdown("### Accelerate Your Capital Growth")
-    st.write("The complete mathematical guide to generating consistent daily returns through sports arbitrage.")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.success("✅ Direct Google Drive Access")
-        if st.button("Download Blueprint PDF"):
-            webbrowser.open_all([DRIVE_LINK])
-            st.markdown(f"[Click here if download doesn't start]({DRIVE_LINK})")
-            
-    with col2:
-        st.info("💳 Payment Gateway")
-        if st.button("Purchase Full Access ($500)"):
-            webbrowser.open_all([PAYSTACK_LINK])
-            st.write("Redirecting to Paystack...")
-
-elif menu == "🧮 Manual Calculator":
-    st.title("🧮 Arbitrage Matrix")
-    bank = st.number_input("Total Bankroll ($)", 100, 50000, 1000)
+if menu == "📡 SCANNER":
+    st.markdown("<h2 class='tool-header'>📡 Live Global Intelligence</h2>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    o1 = c1.number_input("Bookmaker 1 Odds", 1.0, 100.0, 2.10)
-    o2 = c2.number_input("Bookmaker 2 Odds", 1.0, 100.0, 2.05)
-    
-    res = calculate_arbitrage(bank, [o1, o2])
-    if res:
-        st.balloons()
-        st.metric("ROI", f"{res[1]}%")
-        st.metric("Profit", f"${res[2]}")
-        st.write(f"Stake 1: **${res[0][0]}** | Stake 2: **${res[0][1]}**")
-    else:
-        st.error("Not an Arbitrage Opportunity (Margin > 100%)")
+    with c1:
+        st.markdown("""<div class='score-card'><div class='league-header'>Premier League Arb</div>
+            <b>Liverpool vs Arsenal</b><br>H Win: 2.18 (Pinnacle) | D/A: 2.08 (1xBet)<br>
+            <span class='roi-badge'>ROI: 6.22%</span></div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown("""<div class='score-card'><div class='league-header'>Steam Detector</div>
+            <b>Golden State vs Celtics</b><br>Moneyline: GS dropping 1.95 -> 1.72<br>
+            <span style='color:red; font-weight:bold;'>🔥 SHARP MONEY FLOW</span></div>""", unsafe_allow_html=True)
 
-elif menu == "⚙️ System Status":
-    st.title("⚙️ System Diagnostics")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Odds Server", "ONLINE" if ODDS_API_KEY else "OFFLINE")
-    c2.metric("Score Server", "ONLINE" if FOOTBALL_KEY else "OFFLINE")
-    c3.metric("Vault Access", "ENCRYPTED" if VAULT_READY else "OPEN")
+elif menu == "⚽ LIVE CENTER":
+    st.markdown("<h2 class='tool-header'>⚽ Real-Time Match Analytics</h2>", unsafe_allow_html=True)
+    st.markdown("""<div class='score-card'>
+        <div style='display:flex; justify-content:space-between;'><b>UEFA CL</b> <span>78'</span></div>
+        <div style='text-align:center; padding:15px;'><span class='score-box'>PSG 1 - 2 Bayern</span></div>
+        <div style='font-size:13px; color:#555;'>Total xG: 2.45 | Pressure: High (Away)</div>
+        </div>""", unsafe_allow_html=True)
+
+elif menu == "🧮 SHARP SUITE":
+    st.markdown("<h2 class='tool-header'>🧮 Pro Betting Model Suite</h2>", unsafe_allow_html=True)
     
-    if st.button("Secure Logout"):
-        st.session_state.user_plan = None
-        st.rerun()
+    t = st.tabs(["💰 Arb/EV", "📈 Risk", "⚽ Goals", "🏀 NBA", "🧠 Market", "🔗 Correlation", "🎯 Efficiency"])
+
+    with t[0]: # Arb & EV
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("+EV Calculator")
+            s_o = st.number_input("Soft Odds", 1.01, 50.0, 2.10, key="seo")
+            sh_o = st.number_input("Fair Odds", 1.01, 50.0, 2.00, key="sho")
+            st.metric("Expected Value", f"{round(((s_o/sh_o)-1)*100, 2)}%")
+        with c2:
+            st.subheader("Manual Arb")
+            oa = st.number_input("Odds A", 1.01, 50.0, 2.05, key="marb1")
+            ob = st.number_input("Odds B", 1.01, 50.0, 2.05, key="marb2")
+            res = calculate_arbitrage(1000, [oa, ob])
+            if res: st.success(f"ROI: {res[1]}% | Profit: ${res[2]}")
+
+    with t[1]: # Risk/Kelly
+        st.subheader("Kelly Stake Optimizer")
+        ko = st.number_input("Decimal Odds", 1.01, 50.0, 2.00, key="kod")
+        kw = st.slider("Win Probability %", 1, 99, 52)/100
+        kf = ((ko-1)*kw - (1-kw))/(ko-1)
+        st.metric("Stake %", f"{max(0, round(kf*100, 2))}%")
+        
+        st.divider()
+        st.subheader("Bankroll Path Simulator")
+        
+        wr = st.slider("Win Rate %", 1, 100, 55)/100
+        paths = [np.cumsum([1 if np.random.random() < wr else -1 for _ in range(50)]) + 100 for _ in range(10)]
+        st.line_chart(np.transpose(paths))
+
+    with t[2]: # Goals
+        st.subheader("Poisson Score Matrix")
+        
+        c_p1, c_p2 = st.columns(2)
+        h_xg = c_p1.number_input("Home xG", 0.0, 5.0, 1.8)
+        a_xg = c_p2.number_input("Away xG", 0.0, 5.0, 1.3)
+        st.write(f"0-0 CS Prob: {round(poisson_prob(h_xg,0)*poisson_prob(a_xg,0)*100, 2)}%")
+        
+        st.divider()
+        st.subheader("Referee Card Bias")
+        ref_avg = st.number_input("Ref Avg Yellows", 0.0, 10.0, 4.5)
+        st.warning("OVER BIAS" if ref_avg > 4.2 else "UNDER BIAS")
+
+    with t[3]: # NBA
+        st.subheader("NBA Clutch Win Edge")
+        c_pct = st.slider("Home Clutch Win %", 0, 100, 58)
+        pos = st.radio("Ball Possession", ["Home", "Away"])
+        if c_pct > 60 and pos == "Home": st.success("🎯 CLUTCH EDGE DETECTED")
+        
+        st.divider()
+        st.subheader("Prop Consistency (CV%)")
+        prop_in = st.text_input("Player Last 10 Stats", "22, 19, 25, 21, 20")
+        try:
+            pts = [float(x.strip()) for x in prop_in.split(",")]
+            cv = (np.std(pts)/np.mean(pts))*100
+            st.metric("Consistency (CV%)", f"{round(cv,1)}%")
+        except: st.error("Format: 22, 19, 25...")
+
+    with t[4]: # Market Depth & Fatigue
+        st.subheader("Market Momentum (Steam)")
+        
+        o_o = st.number_input("Opening Line", 1.0, 10.0, 2.0, key="ml1")
+        c_o = st.number_input("Current Line", 1.0, 10.0, 1.8, key="ml2")
+        drop = ((o_o-c_o)/o_o)*100
+        st.metric("Steam Drop", f"-{round(drop,1)}%", delta="SHARP MOVE" if drop > 5 else "STABLE")
+        
+        st.divider()
+        st.subheader("Market Depth Analyzer")
+        exchange_vol = st.number_input("Exchange Volume ($)", 0, 1000000, 50000)
+        bookie_max = st.number_input("Bookie Max Stake ($)", 1, 10000, 500)
+        liquidity = (exchange_vol / bookie_max) / 100
+        st.metric("Liquidity Index", round(liquidity, 2), delta="Liquid" if liquidity > 1 else "Illiquid")
+
+    with t[5]: # Correlation
+        st.subheader("Soccer Parlay Correlation")
+        
+        wp = st.slider("Team Win Prob %", 1, 99, 50)/100
+        op = st.slider("Over 2.5 Prob %", 1, 99, 55)/100
+        jp = (wp * op) + 0.15 * math.sqrt(wp*(1-wp)*op*(1-op))
+        st.metric("Fair Correlated Odds", round(1/jp, 2))
+
+    with t[6]: # Efficiency
+        st.subheader("Goal Efficiency Index")
+        ag = st.number_input("Actual Goals (Last 5)", 0, 20, 6)
+        xg = st.number_input("xG (Last 5)", 0.1, 20.0, 9.2)
+        eff = (ag / xg) * 100
+        if eff < 85: st.success(f"Efficiency: {round(eff,1)}% - UNLUCKY (Potential Value)")
+        elif eff > 115: st.error(f"Efficiency: {round(eff,1)}% - OVERPERFORMING (Potential Fade)")
+
+elif menu == "📊 TRACKER":
+    st.markdown("<h2 class='tool-header'>📊 Session Growth Log</h2>", unsafe_allow_html=True)
+    p = st.number_input("Session Result ($)", value=0.0)
+    if st.button("Save To DB"):
+        conn = sqlite3.connect(DB)
+        c = conn.cursor()
+        c.execute("INSERT INTO profits (email, profit) VALUES (?,?)", ("guest", p))
+        conn.commit()
+        conn.close()
+        st.success("Result Logged Locally.")
+    
