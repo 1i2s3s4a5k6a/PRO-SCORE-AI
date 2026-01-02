@@ -12,17 +12,23 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timezone
-from dotenv import load_dotenv
-from functools import lru_cache
+import streamlit as st
 
 # =========================================================
 # ENVIRONMENT & SECURITY
 # =========================================================
-load_dotenv()
 
-SPORTMONKS_KEY = os.getenv("SPORTMONKS_API_KEY")
-ODDS_API_KEY   = os.getenv("ODDS_API_KEY")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+SPORTMONKS_KEY = st.secrets["SPORTMONKS_API_KEY"]
+ODDS_API_KEY   = st.secrets["ODDS_API_KEY"]
+FOOTBALL_API_KEY = st.secrets["FOOTBALL_API_KEY"]
+
+MAILCHIMP_API_KEY = st.secrets["MAILCHIMP_API_KEY"]
+MAILCHIMP_LIST_ID = st.secrets["MAILCHIMP_LIST_ID"]
+
+TELEGRAM_TOKEN = st.secrets["TELEGRAM_TOKEN"]
+TELEGRAM_CHAT_ID = st.secrets["TELEGRAM_CHAT_ID"]
+
+VAULT_READY = st.secrets.get("VAULT_READY", False)
 
 assert SPORTMONKS_KEY and ODDS_API_KEY, "Missing API keys"
 
