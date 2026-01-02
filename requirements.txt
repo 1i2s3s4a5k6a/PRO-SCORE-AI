@@ -3,4 +3,3 @@ requests
 python-dotenv
 numpy
 pandas
-sqlite3
