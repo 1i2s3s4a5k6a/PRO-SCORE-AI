@@ -40,14 +40,14 @@ st.markdown("""
 # ======================================================
 # 2. SECRETS (from Environment Variables)
 # ======================================================
-MAILCHIMP_API_KEY = os.environ.get("OMAILCHIMP_API_KEY")
+MAILCHIMP_API_KEY = os.environ.get("MAILCHIMP_API_KEY")
 ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
 FOOTBALL_KEY = os.environ.get("FOOTBALL_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 VAULT_READY = bool(os.environ.get("VAULT_READY", "True"))
 
-if not (MAILCHIMP_API and ODDS_API_KEY and FOOTBALL_KEY and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
+if not (ODDS_API_KEY and FOOTBALL_KEY and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
     st.error("One or more API keys / tokens are not set. Please update your .env file.")
     st.stop()
 
@@ -95,7 +95,20 @@ def send_telegram(msg):
     except Exception as ex:
         # In production, consider logging exception details to a secure sink
         pass
-
+def subscribe_to_mailchimp(email):
+    mailchimp_api = os.getenv("MAILCHIMP_API")
+    list_id = os.getenv("MAILCHIMP_LIST_ID")
+    # Extract the data center (e.g., 'us1') from the end of your API key
+    dc = mailchimp_api.split('-')[-1]
+    url = f"https://{dc}.api.mailchimp.com/3.0/lists/{list_id}/members"
+    
+    data = {
+        "email_address": email,
+        "status": "subscribed"
+    }
+    response = requests.post(url, auth=('apikey', mailchimp_api), json=data)
+    return response.status_code
+    
 def calculate_arbitrage(bankroll, odds):
     margin = sum(1 / o for o in odds)
     if margin >= 1: return None
