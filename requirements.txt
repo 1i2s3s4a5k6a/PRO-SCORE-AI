@@ -1,5 +1,6 @@
 streamlit
 requests
+python-dotenv
+numpy
 pandas
-streamlit-autorefresh
-
+sqlite3
