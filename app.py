@@ -40,13 +40,14 @@ st.markdown("""
 # ======================================================
 # 2. SECRETS (from Environment Variables)
 # ======================================================
+MAILCHIMP_API_KEY = os.environ.get("OMAILCHIMP_API_KEY")
 ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
 FOOTBALL_KEY = os.environ.get("FOOTBALL_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 VAULT_READY = bool(os.environ.get("VAULT_READY", "True"))
 
-if not (ODDS_API_KEY and FOOTBALL_KEY and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
+if not (MAILCHIMP_API and ODDS_API_KEY and FOOTBALL_KEY and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
     st.error("One or more API keys / tokens are not set. Please update your .env file.")
     st.stop()
 
