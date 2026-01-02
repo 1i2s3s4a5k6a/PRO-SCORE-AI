@@ -116,7 +116,7 @@ def elo_update(a, b, score, k=20):
 # =========================================================
 # API CALLS (RATE SAFE)
 # =========================================================
-@lru_cache(maxsize=1)
+@st.cache_data(ttl=60)
 def fetch_live():
     r = requests.get(
         "https://api.sportmonks.com/v3/football/livescores",
@@ -125,7 +125,7 @@ def fetch_live():
     )
     return r.json(), datetime.now(timezone.utc)
 
-@lru_cache(maxsize=1)
+@st.cache_data(ttl=60)
 def fetch_odds():
     r = requests.get(
         "https://api.the-odds-api.com/v4/sports/soccer/odds",
